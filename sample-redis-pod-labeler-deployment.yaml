@@ -85,3 +85,18 @@ spec:
               cpu: 100m
               memory: 100Mi
       serviceAccountName: redis-pod-labeler-service-account
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-trade-replication-labeled
+  namespace: redis-trade-replication
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      nodePort: 30482
+  selector:
+    redis.io/role: master
+  type: NodePort
