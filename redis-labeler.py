@@ -17,9 +17,10 @@
 import argparse
 import logging
 import subprocess
-import time
+import signal
 
 from kubernetes import config, client
+from threading import Event 
 
 POD_NAME_ANNOTATION = "statefulset.kubernetes.io/pod-name"
 DEFAULT_CLUSTER_DOMAIN = "cluster.local"
@@ -84,6 +85,12 @@ def find_redis_and_label(v1):
         logging.debug(f"POD:  {pod_data[0]}, {pod_data[1]}")
         label_redis_pods(v1, pod_data[1], generate_pod_label_body(pod_data[0], args.domain))
 
+exit = Event()
+
+def quit(signo, _frame):
+    print("Interrupted by %d, shutting down" % signo)
+    exit.set()
+
 
 # MAIN
 parser = argparse.ArgumentParser(description="Checking redis pods and labelling them with master/ slave accordingly")
@@ -128,7 +135,10 @@ if args.skip_tls_verify:
 
 v1Api = client.CoreV1Api()
 
-while True:
+for sig in ('TERM', 'HUP', 'INT'):
+    signal.signal(getattr(signal, 'SIG'+sig), quit);
+
+while not exit.is_set():
     find_redis_and_label(v1Api)
     logging.info(f"Sleeping {args.sleep_seconds}...")
-    time.sleep(int(args.sleep_seconds))
+    exit.wait(int(args.sleep_seconds))
