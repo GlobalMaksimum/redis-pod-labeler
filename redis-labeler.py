@@ -23,7 +23,9 @@ from kubernetes import config, client
 
 POD_NAME_ANNOTATION = "statefulset.kubernetes.io/pod-name"
 DEFAULT_CLUSTER_DOMAIN = "cluster.local"
-REDIS_HA = "redis-ha"
+REDIS_SETUP_KEY = "redis_setup_type"
+REDIS_REPLICATION_ROLE_KEY = "role"
+REDIS_SETUP_TYPE = "replication"
 
 
 def get_redis_master_svc_ip(redis_host, sentinel_port, sentinel_cluster_name):
@@ -38,28 +40,27 @@ def get_redis_master_svc_ip(redis_host, sentinel_port, sentinel_cluster_name):
 
 def get_redis_pods_with_roles(k8s_api, master_svc_ip):
     redis_pods_with_role = []
-    services = k8s_api.list_namespaced_service(namespace="{}".format(args.namespace),
-                                               label_selector="{}".format(args.svc_selector))
-    logging.debug(f"getting list of all services in namespace {args.namespace}")
-    for service in services.items:
-        if is_redis_ha_service(service.spec.selector):
-            redis_pod_name = service.spec.selector[POD_NAME_ANNOTATION].strip()
-            logging.debug("|" + service.spec.cluster_ip + "|" + master_svc_ip + "|" + redis_pod_name)
-            if str(service.spec.cluster_ip.strip()) == str(master_svc_ip.strip()):
+    pods = k8s_api.list_namespaced_pod(namespace="{}".format(args.namespace),label_selector="{}".format(args.pod_selector))
+    logging.debug(f"getting list of all pods in namespace {args.namespace}")
+    for pod in pods.items:
+        if is_redis_replication_pod(pod.metadata.labels):
+            redis_pod_name = pod.metadata.name
+            logging.debug("|" + pod.status.pod_ip + "|" + master_svc_ip + "|" + redis_pod_name)
+            if str(pod.status.pod_ip.strip()) == str(master_svc_ip.strip()):
                 logging.info("master: " + redis_pod_name)
                 redis_pods_with_role.append(("master", redis_pod_name))
             else:
                 logging.info("slave: " + redis_pod_name)
                 redis_pods_with_role.append(("slave", redis_pod_name))
         else:
-            logging.debug(f"not redis cluster related service - {str(service.spec.selector)}")
+            logging.debug(f"not redis cluster related service - {str(pod.metadata.labels)}")
 
     return redis_pods_with_role
 
 
-def is_redis_ha_service(service_selector):
-    logging.debug(f"{str(service_selector)}")
-    if POD_NAME_ANNOTATION.strip() in service_selector and 'app' in service_selector and service_selector['app'].strip() == REDIS_HA:
+def is_redis_replication_pod(labels):
+    logging.debug(f"{str(labels)}")
+    if POD_NAME_ANNOTATION.strip() in labels and REDIS_REPLICATION_ROLE_KEY in labels and REDIS_SETUP_KEY in labels and labels[REDIS_REPLICATION_ROLE_KEY].strip() == REDIS_SETUP_TYPE and labels[REDIS_SETUP_KEY].strip() == REDIS_SETUP_TYPE:
         return True
     else:
         return False
@@ -88,7 +89,7 @@ def find_redis_and_label(v1):
 parser = argparse.ArgumentParser(description="Checking redis pods and labelling them with master/ slave accordingly")
 parser.add_argument('--dry-run', dest='dry_run', action='store_true', default=False)
 parser.add_argument('--namespace', dest='namespace', required=False, default='redis')
-parser.add_argument('--svc-selector', dest='svc_selector', default='app=redis-ha', required=False)
+parser.add_argument('--pod-selector', dest='pod_selector', default='app=redis-ha', required=False)
 parser.add_argument('--redis-cluster-name', dest='cluster_name', required=True)
 parser.add_argument('--redis-headless-svc-name', dest='headless_name', required=True)
 parser.add_argument('--redis-sentinel_port', dest='sentinel_port', default=26379, required=False)

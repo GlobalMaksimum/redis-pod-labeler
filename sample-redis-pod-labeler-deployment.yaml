@@ -7,13 +7,13 @@ metadata:
   labels:
     app: redis-pod-labeler
   name: redis-pod-labeler-service-account
-  namespace: redis
+  namespace: redis-trade-replication
 ---
-kind: ClusterRole
+kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: redis-pod-labeler-role
-  namespace: redis
+  namespace: redis-trade-replication
 rules:
   - apiGroups: [""]
     resources: ["namespaces", "pods"]
@@ -23,18 +23,18 @@ rules:
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: redis-pod-labeler-rolebinding
-  namespace: redis
+  namespace: redis-trade-replication
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: redis-pod-labeler-role
 subjects:
   - kind: ServiceAccount
     name: redis-pod-labeler-service-account
-    namespace: redis
+    namespace: redis-trade-replication
 ---
 kind: Deployment
 apiVersion: apps/v1
@@ -42,7 +42,7 @@ metadata:
   labels:
     app: redis-pod-labeler
   name: redis-pod-labeler
-  namespace: redis
+  namespace: redis-trade-replication
 spec:
   replicas: 1
   revisionHistoryLimit: 5
@@ -56,15 +56,14 @@ spec:
     spec:
       containers:
         - name: redis-pod-labeler
-          imagePullPolicy: Always
           image: "globalmaksimum/redis-pod-labeler:0.3"
           args:
             - ./redis-labeler.py
-            - --namespace=redis    # namespace which deployed redis
-            - --pod-selector=app=redis-ha #  key=value of to match and get the redis pods (here app=redis-ha)
-            - --update-period=60   # how frequent labelling should happen( default to 60 seconds = 1 minute )
+            - --namespace=redis-trade-replication    # namespace which deployed redis
+            - --pod-selector=app=redis-trade-replication #  key=value of to match and get the redis pods (here app=redis-ha)
+            - --update-period=6   # how frequent labelling should happen( default to 60 seconds = 1 minute )
             - --redis-cluster-name=mymaster # redis cluster name
-            - --redis-headless-svc-name=redis-ha # redis headless service name
+            - --redis-headless-svc-name=redis-trade-replication-headless # redis headless service name
             #- --verbose            # if u want to see more detailed output
           livenessProbe:
             exec:
